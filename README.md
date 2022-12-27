@@ -1,4 +1,4 @@
-# "Last successful commit" action
+# get-last-successful-commit
 
 This action returns the commit hash for the last successful run of the current workflow on:
 * The current branch for the given _event-name_ (default: pull_request).
@@ -8,7 +8,7 @@ This is especially useful when we have a workflow where we need to know what cha
 
 ## Usage
 ```yaml
-- uses: ChainReaction-LTD/last-successful-commit-action@v2
+- uses: ChainReaction-LTD/get-last-successful-commit@v1
   with:
     # Event name that triggered the workflow for the current branch (for query)
     # Default: pull_request
