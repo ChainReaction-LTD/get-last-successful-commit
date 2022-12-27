@@ -4,7 +4,7 @@ This action returns the commit hash for the last successful run of the current w
 * The current branch for the given _event-name_ (default: pull_request).
 * The parent branch for the given _parent-envent-name_ (default: push) - when last successful run for current branch for the given _event-name_ CANNOT be found.
 
-This is especially useful when we have a workflow where we need to know what changed in on a given branch between two commits, so we can execute an incremental CI.
+This is especially useful when we have a workflow where we need to know what changed in a given branch between two commits, so we can execute an incremental CI.
 
 ## Usage
 ```yaml
