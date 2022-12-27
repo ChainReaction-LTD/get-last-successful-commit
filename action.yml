@@ -1,5 +1,5 @@
 ---
-name: last-successfull-commit-action
+name: get-last-successfull-commit
 description: Get the commit hash of the last successful (current) workflow run on the current branch
 inputs:
   event-name:
