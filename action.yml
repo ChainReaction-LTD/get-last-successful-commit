@@ -1,0 +1,98 @@
+---
+name: get-last-successfull-commit
+description: Get the commit hash of the last successful (current) workflow run on the current branch
+inputs:
+  event-name:
+    description: Event name that triggered the workflow for the current branch (for query)
+    required: false
+    default: pull_request
+  parent-branch:
+    description: Parent of the current branch to get last successful commit from (fallback)
+    required: true
+  parent-event-name:
+    description: Event name that triggered the workflow for the parent branch (for query)
+    required: false
+    default: push
+  github-token:
+    description: GitHub personal access token (with repo scope for private repositories and public_repo scope for public repositories)
+    required: true
+outputs:
+  commit-hash:
+    description: Last successful commit hash (for current or parent branch)
+    value: ${{ steps.set-output-value.outputs.COMMIT_HASH }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get current workflow ID
+      id: get-workflow-id
+      shell: bash
+      run: |
+        echo "[INFO] Querying for workflow ID by name: ${{ github.workflow }}"
+        WORKFLOW_ID=$(curl -s -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ inputs.github-token }}" -H "X-GitHub-Api-Version: 2022-11-28" "${{ github.api_url }}/repos/${{ github.repository }}/actions/workflows?per_page=100" | jq -r '.workflows[] | select(.name == "${{ github.workflow }}") | .id // empty')
+        if [[ -z $WORKFLOW_ID ]]; then
+          echo "[INFO] Querying for workflow ID by path: ${{ github.workflow }}"
+          WORKFLOW_ID=$(curl -s -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ inputs.github-token }}" -H "X-GitHub-Api-Version: 2022-11-28" "${{ github.api_url }}/repos/${{ github.repository }}/actions/workflows?per_page=100" | jq -r '.workflows[] | select(.path == "${{ github.workflow }}") | .id // empty')
+        fi
+        if [[ -z $WORKFLOW_ID ]]; then
+          echo "[ERROR] workflow ID cannot be found for the current workflow!"
+          exit 1
+        fi
+        echo "WORKFLOW_ID=$WORKFLOW_ID"
+        echo "WORKFLOW_ID=$WORKFLOW_ID" >> $GITHUB_OUTPUT
+
+    - name: Get successful runs for current workflow on the current branch
+      id: get-commit-hash-for-current-branch
+      shell: bash
+      run: |
+        echo "[INFO] Querying for commit-hash of last successful workflow run for:"
+        echo "[INFO]   current branch: ${{ github.head_ref || github.ref_name }}"
+        echo "[INFO]   event name: ${{ inputs.event-name }}"
+        COMMIT_HASH=$(curl -s -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ inputs.github-token }}" -H "X-GitHub-Api-Version: 2022-11-28" "${{ github.api_url }}/repos/${{ github.repository }}/actions/workflows/${{ steps.get-workflow-id.outputs.WORKFLOW_ID }}/runs?branch=${{ github.head_ref || github.ref_name }}&event=${{ inputs.event-name }}&status=success&per_page=1" | jq -r '.workflow_runs[0].head_sha // empty')
+        if [[ -z $COMMIT_HASH ]]; then
+          echo "[INFO] Commit hash for last successful run NOT found!"
+        else
+          echo "COMMIT_HASH=$COMMIT_HASH"
+          echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Check if commit hash exists
+      id: confirm-commit-hash
+      shell: bash
+      if: ${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH != '' }}
+      run: |
+        set +e
+        git cat-file -e ${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH }}
+        if [[ $? -eq 0 ]]; then
+          echo "[INFO] Commit hash ${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH }} found."
+          CONFIRMED=1
+        else
+          echo "[INFO] Commit hash ${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH }} NOT found!"
+          CONFIRMED=0
+        fi
+        echo "CONFIRMED=$CONFIRMED" >> $GITHUB_OUTPUT
+
+    - name: Get successful runs for current workflow on the parent branch
+      id: get-commit-hash-for-parent-branch
+      shell: bash
+      if: ${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH == '' || steps.confirm-commit-hash.outputs.CONFIRMED == 0 }}
+      run: |
+        echo "[INFO] Querying for commit-hash of last successful workflow run for:"
+        echo "[INFO]   parent branch: ${{ inputs.parent-branch }}"
+        echo "[INFO]   event name: ${{ inputs.parent-event-name }}"
+        COMMIT_HASH=$(curl -s -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ inputs.github-token }}" -H "X-GitHub-Api-Version: 2022-11-28" "${{ github.api_url }}/repos/${{ github.repository }}/actions/workflows/${{ steps.get-workflow-id.outputs.WORKFLOW_ID }}/runs?branch=${{ inputs.parent-branch }}&event=${{ inputs.parent-event-name }}&status=success&per_page=1" | jq -r '.workflow_runs[0].head_sha // empty')
+        if [[ -z $COMMIT_HASH ]]; then
+          echo "[INFO] Commit hash for last successful run NOT found!"
+        else
+          echo "COMMIT_HASH=$COMMIT_HASH"
+          echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Set output commit hash
+      id: set-output-value
+      shell: bash
+      run: |
+        COMMIT_HASH=${{ steps.get-commit-hash-for-parent-branch.outputs.COMMIT_HASH }}
+        [[ -z $COMMIT_HASH && "${{ steps.confirm-commit-hash.outputs.CONFIRMED }}" == "1" ]] && COMMIT_HASH=${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH }}
+        [[ -z $COMMIT_HASH ]] && echo "[WARNING] Commit hash for last successful execution on both current and parent branches NOT found!"
+        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_OUTPUT
