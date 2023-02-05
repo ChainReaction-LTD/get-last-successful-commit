@@ -16,10 +16,17 @@ inputs:
   github-token:
     description: GitHub personal access token (with repo scope for private repositories and public_repo scope for public repositories)
     required: true
+  force-parent-source:
+    description: Force analysis on parent branch only
+    required: false
+    default: 'false'
 outputs:
   commit-hash:
     description: Last successful commit hash (for current or parent branch)
     value: ${{ steps.set-output-value.outputs.COMMIT_HASH }}
+  commit-hash-source:
+    description: Source of the commit hash (parent or current)
+    value: ${{ steps.set-output-value.outputs.COMMIT_HASH_SOURCE }}
 
 runs:
   using: composite
@@ -43,6 +50,7 @@ runs:
 
     - name: Get successful runs for current workflow on the current branch
       id: get-commit-hash-for-current-branch
+      if: ${{ inputs.force-parent-source == 'false' }}
       shell: bash
       run: |
         echo "[INFO] Querying for commit-hash of last successful workflow run for:"
@@ -93,6 +101,19 @@ runs:
       shell: bash
       run: |
         COMMIT_HASH=${{ steps.get-commit-hash-for-parent-branch.outputs.COMMIT_HASH }}
-        [[ -z $COMMIT_HASH && "${{ steps.confirm-commit-hash.outputs.CONFIRMED }}" == "1" ]] && COMMIT_HASH=${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH }}
-        [[ -z $COMMIT_HASH ]] && echo "[WARNING] Commit hash for last successful execution on both current and parent branches NOT found!"
+        COMMIT_HASH_SOURCE=parent
+        if [[ -z $COMMIT_HASH && "${{ steps.confirm-commit-hash.outputs.CONFIRMED }}" == "1" ]]; then
+          COMMIT_HASH=${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH }}
+          COMMIT_HASH_SOURCE=current
+        fi
+
+        if [[ -z $COMMIT_HASH ]]; then
+          echo "[WARNING] Commit hash for last successful execution on both current and parent branches NOT found!"
+          COMMIT_HASH_SOURCE=""
+        fi
+
+        echo "COMMIT_HASH=$COMMIT_HASH"
         echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_OUTPUT
+
+        echo "COMMIT_HASH_SOURCE=$COMMIT_HASH_SOURCE"
+        echo "COMMIT_HASH_SOURCE=$COMMIT_HASH_SOURCE" >> $GITHUB_OUTPUT
