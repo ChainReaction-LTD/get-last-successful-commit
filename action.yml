@@ -70,7 +70,7 @@ runs:
       if: ${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH != '' }}
       run: |
         set +e
-        git cat-file -e ${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH }}
+        git merge-base --is-ancestor ${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH }} HEAD
         if [[ $? -eq 0 ]]; then
           echo "[INFO] Commit hash ${{ steps.get-commit-hash-for-current-branch.outputs.COMMIT_HASH }} found."
           CONFIRMED=1
